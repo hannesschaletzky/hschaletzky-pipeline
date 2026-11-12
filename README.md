@@ -52,8 +52,9 @@ npm run typecheck
 npm test                 # unit + integration (starts a Postgres container)
 ```
 
-The script in `docker/postgres/init/` creates the app role only when the database volume is empty.
-After changing `APP_DB_PASSWORD`, reset the local database with `docker compose down -v`.
+`npm run db:migrate` applies migrations as the owner role and creates or updates the
+least-privilege app role (`pipeline_app`). It is idempotent: after changing `APP_DB_PASSWORD`, just
+run it again.
 
 After changing `src/db/schema.ts`, run `npm run db:generate` and commit the new migration. CI fails
 if schema and migrations diverge.

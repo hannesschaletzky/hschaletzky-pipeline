@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 
-import { runMigrations } from '../../src/db/migrate.js';
+import { APP_ROLE, runMigrations } from '../../src/db/migrate.js';
 
 const root = path.resolve(import.meta.dirname, '../..');
 
@@ -23,28 +23,20 @@ export interface TestDatabase {
   appUrl: string;
 }
 
-/** Starts Postgres with the same init script as compose.yml and applies all migrations. */
+/** Starts Postgres and runs the same migration step as production (schema + app role). */
 export async function startTestDatabase(): Promise<TestDatabase> {
-  const appPassword = 'test-app-password';
+  const appPassword = 'test-app-password-0123456789';
   const container = await new PostgreSqlContainer(postgresImage())
     .withDatabase('pipeline')
     .withUsername('pipeline')
     .withPassword('test-owner-password')
-    .withEnvironment({ APP_DB_PASSWORD: appPassword })
-    .withCopyFilesToContainer([
-      {
-        source: path.join(root, 'docker/postgres/init/01-app-role.sh'),
-        target: '/docker-entrypoint-initdb.d/01-app-role.sh',
-        mode: 0o755,
-      },
-    ])
     .start();
 
   const ownerUrl = container.getConnectionUri();
   const appUrl = new URL(ownerUrl);
-  appUrl.username = 'pipeline_app';
+  appUrl.username = APP_ROLE;
   appUrl.password = appPassword;
 
-  await runMigrations(ownerUrl);
+  await runMigrations({ ownerUrl, appPassword });
   return { container, ownerUrl, appUrl: appUrl.toString() };
 }

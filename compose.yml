@@ -10,12 +10,10 @@ services:
       POSTGRES_USER: pipeline
       POSTGRES_DB: pipeline
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
     ports:
       # Bound to localhost only, never to all interfaces.
       - '127.0.0.1:5432:5432'
     volumes:
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
       # Postgres 18+ images keep data in a versioned subdirectory below this path.
       - postgres_data:/var/lib/postgresql
     healthcheck:

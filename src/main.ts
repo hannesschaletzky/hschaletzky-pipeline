@@ -4,11 +4,11 @@ import { createApp } from './http/app.js';
 import { log } from './log.js';
 
 const config = loadAppConfig();
-const database = createDatabase(config.DATABASE_URL);
+const database = createDatabase(config.databaseUrl);
 const app = createApp({ db: database.db });
 
-const server = app.listen(config.PORT, () => {
-  log.info('server listening', { port: config.PORT });
+const server = app.listen(config.port, () => {
+  log.info('server listening', { port: config.port });
 });
 
 function shutdown(signal: string): void {
