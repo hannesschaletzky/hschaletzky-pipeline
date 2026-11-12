@@ -78,7 +78,20 @@ if schema and migrations diverge.
 
 ## Deployment
 
-<!-- TODO (milestone 2): Docker image on ghcr.io, rollout via hschaletzky-infra -->
+After CI passes on `main`, `.github/workflows/deploy.yml` builds the image, pushes it to
+`ghcr.io/hannesschaletzky/hschaletzky-pipeline` (tagged `latest` and with the commit SHA) and calls
+the restricted deploy command on the server. The server setup lives in
+[hschaletzky-infra](https://github.com/hannesschaletzky/hschaletzky-infra).
+
+One image, two commands:
+
+| Command                       | Credentials   | Purpose                                                               |
+| ----------------------------- | ------------- | --------------------------------------------------------------------- |
+| `node dist/db/migrate.js`     | owner role    | apply migrations, configure the app role — runs first on every deploy |
+| `node dist/main.js` (default) | app role only | serve `/health`, OAuth and `/mcp`                                     |
+
+Secrets are passed as files (`*_FILE` variables, Docker Compose secrets), never as plain
+environment variables. The container runs as the unprivileged `node` user.
 
 ## License
 
