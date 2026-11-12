@@ -47,10 +47,12 @@ const migrationSchema = z.object({
   APP_DB_PASSWORD: z.string().min(16, 'must be at least 16 characters'),
 });
 
+/** Values that may be passed as files. The GitHub client id is not secret, but travels with its secret. */
 const SECRET_NAMES = [
   'DATABASE_PASSWORD',
   'MIGRATION_DATABASE_PASSWORD',
   'APP_DB_PASSWORD',
+  'GITHUB_CLIENT_ID',
   'GITHUB_CLIENT_SECRET',
 ];
 
