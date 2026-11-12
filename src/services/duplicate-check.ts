@@ -1,4 +1,4 @@
-import type { Database } from '../db/client.js';
+import type { DbOrTx } from '../db/client.js';
 import { loadDuplicateCandidates } from '../db/repositories/applications.js';
 import { type DuplicateMatch, findDuplicates } from '../domain/duplicates.js';
 import {
@@ -21,7 +21,7 @@ export interface DuplicateQuery {
 
 /** Loads candidates and applies the duplicate rules from the domain layer. */
 export async function checkDuplicates(
-  db: Database,
+  db: DbOrTx,
   query: DuplicateQuery,
 ): Promise<DuplicateMatch[]> {
   const rows = await loadDuplicateCandidates(db, query.postingText ?? null);

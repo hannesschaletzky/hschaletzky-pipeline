@@ -9,7 +9,7 @@ import {
   closedAtAfter,
   isClosed,
 } from '../../domain/status.js';
-import type { Database } from '../client.js';
+import type { DbOrTx } from '../client.js';
 import { applicationEvents, applications, contacts, organizations } from '../schema.js';
 import {
   type ContactInput,
@@ -85,7 +85,7 @@ async function toColumns(
 }
 
 export async function createApplication(
-  db: Database,
+  db: DbOrTx,
   input: NewApplication,
   now = new Date(),
 ): Promise<{ id: number }> {
@@ -142,7 +142,7 @@ async function lockApplication(tx: Executor, id: number) {
 
 /** Updates fields (not the status) and records which fields changed. */
 export async function updateApplication(
-  db: Database,
+  db: DbOrTx,
   id: number,
   fields: ApplicationFields,
 ): Promise<{ updated: string[] }> {
@@ -177,7 +177,7 @@ export async function updateApplication(
 
 /** Changes the status, keeps `closed_at` consistent and records the change (and an optional note). */
 export async function updateStatus(
-  db: Database,
+  db: DbOrTx,
   id: number,
   to: ApplicationStatus,
   note?: string,
@@ -220,7 +220,7 @@ export interface ListFilter {
   since?: string;
 }
 
-export async function listApplications(db: Database, filter: ListFilter = {}) {
+export async function listApplications(db: DbOrTx, filter: ListFilter = {}) {
   const conditions = [
     filter.status?.length ? inArray(applications.status, filter.status) : undefined,
     filter.agency ? eq(agency.normalizedName, normalizeOrganizationName(filter.agency)) : undefined,
@@ -246,7 +246,7 @@ export async function listApplications(db: Database, filter: ListFilter = {}) {
     .orderBy(desc(applications.updatedAt));
 }
 
-export async function getApplication(db: Database, id: number) {
+export async function getApplication(db: DbOrTx, id: number) {
   const [row] = await db
     .select({
       application: applications,
@@ -301,7 +301,7 @@ export async function getApplication(db: Database, id: number) {
 }
 
 /** All applications as duplicate candidates, with posting-text similarity if a text is given. */
-export async function loadDuplicateCandidates(db: Database, postingText: string | null) {
+export async function loadDuplicateCandidates(db: DbOrTx, postingText: string | null) {
   return db
     .select({
       id: applications.id,

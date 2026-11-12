@@ -1,11 +1,10 @@
 import { and, eq, sql } from 'drizzle-orm';
 
 import { normalizeOrganizationName } from '../../domain/normalize.js';
-import type { Database } from '../client.js';
+import type { DbOrTx } from '../client.js';
 import { contacts, organizations } from '../schema.js';
 
-/** A database handle or an open transaction. */
-export type Executor = Pick<Database, 'select' | 'insert' | 'update' | 'delete' | 'execute'>;
+export type Executor = DbOrTx;
 
 export type OrganizationKind = NonNullable<typeof organizations.$inferSelect.kind>;
 
