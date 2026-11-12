@@ -15,16 +15,18 @@ let testDb: TestDatabase;
 let database: DatabaseHandle;
 const servers: Server[] = [];
 
-async function listen(mcpAuth?: RequestHandler): Promise<string> {
-  const server = createApp({ db: database.db, mcpAuth }).listen(0);
+async function listen(bearer?: RequestHandler): Promise<string> {
+  const auth = bearer && { routes: passThrough, bearer };
+  const server = createApp({ db: database.db, auth }).listen(0);
   servers.push(server);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   return `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
 }
 
-const allowAll: RequestHandler = (_req, _res, next) => {
+const passThrough: RequestHandler = (_req, _res, next) => {
   next();
 };
+const allowAll = passThrough;
 
 let client: Client;
 

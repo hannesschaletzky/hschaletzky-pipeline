@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
-import express, { type ErrorRequestHandler, type Express, type RequestHandler } from 'express';
+import express, { type ErrorRequestHandler, type Express } from 'express';
+
+import { MCP_PATH, type McpAuth } from '../auth/index.js';
 
 import type { Database } from '../db/client.js';
 import { log } from '../log.js';
@@ -8,13 +10,13 @@ import { mcpMethodNotAllowed, mcpPostHandler } from '../mcp/http.js';
 export interface AppOptions {
   db: Database;
   /**
-   * Authentication for /mcp. Required to mount the endpoint at all, so it can never be
-   * exposed without auth by accident.
+   * OAuth for /mcp. Required to mount the endpoint at all, so it can never be exposed
+   * without authentication by accident.
    */
-  mcpAuth?: RequestHandler;
+  auth?: McpAuth;
 }
 
-export function createApp({ db, mcpAuth }: AppOptions): Express {
+export function createApp({ db, auth }: AppOptions): Express {
   const app = express();
   app.disable('x-powered-by');
   // Behind Caddy: use X-Forwarded-For from exactly one proxy hop (rate limiting, logs).
@@ -31,11 +33,12 @@ export function createApp({ db, mcpAuth }: AppOptions): Express {
     }
   });
 
-  if (mcpAuth) {
+  if (auth) {
+    app.use(auth.routes);
     // Seed imports can carry many posting texts at once.
-    app.post('/mcp', mcpAuth, express.json({ limit: '5mb' }), mcpPostHandler(db));
-    app.get('/mcp', mcpAuth, mcpMethodNotAllowed);
-    app.delete('/mcp', mcpAuth, mcpMethodNotAllowed);
+    app.post(MCP_PATH, auth.bearer, express.json({ limit: '5mb' }), mcpPostHandler(db));
+    app.get(MCP_PATH, auth.bearer, mcpMethodNotAllowed);
+    app.delete(MCP_PATH, auth.bearer, mcpMethodNotAllowed);
   }
 
   const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {

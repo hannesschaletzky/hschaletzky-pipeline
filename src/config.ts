@@ -17,7 +17,22 @@ const appSchema = z.object({
   DATABASE_URL: postgresUrl,
   DATABASE_PASSWORD: z.string().min(1).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+
+  // OAuth for /mcp. All of the GitHub settings or none (then /mcp is not served).
+  PUBLIC_BASE_URL: z.url().optional(),
+  GITHUB_CLIENT_ID: z.string().min(1).optional(),
+  GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+  /** Numeric GitHub user id (stable, unlike the login name): https://api.github.com/users/<login> */
+  GITHUB_ALLOWED_USER_ID: z.coerce.number().int().positive().optional(),
+  /** Comma-separated redirect URIs OAuth clients may register. */
+  OAUTH_REDIRECT_URIS: z.string().optional(),
 });
+
+/** claude.ai's OAuth callback; Anthropic announced it may move to claude.com. */
+export const DEFAULT_REDIRECT_URIS = [
+  'https://claude.ai/api/mcp/auth_callback',
+  'https://claude.com/api/mcp/auth_callback',
+];
 
 const migrationSchema = z.object({
   /** Owner role: applies migrations and manages the app role. */
@@ -27,11 +42,26 @@ const migrationSchema = z.object({
   APP_DB_PASSWORD: z.string().min(16, 'must be at least 16 characters'),
 });
 
-const SECRET_NAMES = ['DATABASE_PASSWORD', 'MIGRATION_DATABASE_PASSWORD', 'APP_DB_PASSWORD'];
+const SECRET_NAMES = [
+  'DATABASE_PASSWORD',
+  'MIGRATION_DATABASE_PASSWORD',
+  'APP_DB_PASSWORD',
+  'GITHUB_CLIENT_SECRET',
+];
+
+export interface AuthConfig {
+  publicBaseUrl: URL;
+  githubClientId: string;
+  githubClientSecret: string;
+  allowedGithubUserId: number;
+  allowedRedirectUris: string[];
+}
 
 export interface AppConfig {
   databaseUrl: string;
   port: number;
+  /** null: OAuth not configured, /mcp is not served. */
+  auth: AuthConfig | null;
 }
 
 export interface MigrationConfig {
@@ -77,11 +107,45 @@ function withPassword(url: string, password: string | undefined): string {
   return parsed.toString();
 }
 
+function authConfig(config: z.infer<typeof appSchema>): AuthConfig | null {
+  const required = {
+    PUBLIC_BASE_URL: config.PUBLIC_BASE_URL,
+    GITHUB_CLIENT_ID: config.GITHUB_CLIENT_ID,
+    GITHUB_CLIENT_SECRET: config.GITHUB_CLIENT_SECRET,
+    GITHUB_ALLOWED_USER_ID: config.GITHUB_ALLOWED_USER_ID,
+  };
+  const missing = Object.entries(required)
+    .filter(([, value]) => value === undefined)
+    .map(([name]) => name);
+  if (missing.length === Object.keys(required).length) return null;
+  if (
+    missing.length > 0 ||
+    !config.PUBLIC_BASE_URL ||
+    !config.GITHUB_CLIENT_ID ||
+    !config.GITHUB_CLIENT_SECRET ||
+    !config.GITHUB_ALLOWED_USER_ID
+  ) {
+    throw new Error(`Incomplete OAuth configuration, missing: ${missing.join(', ')}`);
+  }
+  return {
+    publicBaseUrl: new URL(config.PUBLIC_BASE_URL),
+    githubClientId: config.GITHUB_CLIENT_ID,
+    githubClientSecret: config.GITHUB_CLIENT_SECRET,
+    allowedGithubUserId: config.GITHUB_ALLOWED_USER_ID,
+    allowedRedirectUris: config.OAUTH_REDIRECT_URIS
+      ? config.OAUTH_REDIRECT_URIS.split(',')
+          .map((uri) => uri.trim())
+          .filter(Boolean)
+      : DEFAULT_REDIRECT_URIS,
+  };
+}
+
 export function loadAppConfig(env: Env = process.env): AppConfig {
   const config = parse(appSchema, env);
   return {
     databaseUrl: withPassword(config.DATABASE_URL, config.DATABASE_PASSWORD),
     port: config.PORT,
+    auth: authConfig(config),
   };
 }
 

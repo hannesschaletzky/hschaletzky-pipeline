@@ -1,3 +1,4 @@
+import { createMcpAuth } from './auth/index.js';
 import { loadAppConfig } from './config.js';
 import { createDatabase } from './db/client.js';
 import { createApp } from './http/app.js';
@@ -5,7 +6,9 @@ import { log } from './log.js';
 
 const config = loadAppConfig();
 const database = createDatabase(config.databaseUrl);
-const app = createApp({ db: database.db });
+const auth = config.auth ? createMcpAuth({ db: database.db, config: config.auth }) : undefined;
+if (!auth) log.warn('OAuth not configured: /mcp is disabled');
+const app = createApp({ db: database.db, auth });
 
 const server = app.listen(config.port, () => {
   log.info('server listening', { port: config.port });

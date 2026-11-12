@@ -27,6 +27,7 @@ describe('loadAppConfig', () => {
     expect(config).toEqual({
       databaseUrl: 'postgres://app:secret@localhost:5432/pipeline',
       port: 3000,
+      auth: null,
     });
   });
 
@@ -48,6 +49,41 @@ describe('loadAppConfig', () => {
     );
     expect(message).toMatch(/PORT/);
     expect(message).not.toContain('secret');
+  });
+});
+
+describe('OAuth configuration', () => {
+  const base = { DATABASE_URL: 'postgres://app:pw@localhost/pipeline' };
+  const github = {
+    PUBLIC_BASE_URL: 'https://pipeline.example.com',
+    GITHUB_CLIENT_ID: 'gh-client',
+    GITHUB_CLIENT_SECRET: 'gh-secret',
+    GITHUB_ALLOWED_USER_ID: '12345',
+  };
+
+  it('is complete or absent, never partial', () => {
+    expect(loadAppConfig({ ...base, ...github }).auth).toMatchObject({
+      allowedGithubUserId: 12345,
+      allowedRedirectUris: [
+        'https://claude.ai/api/mcp/auth_callback',
+        'https://claude.com/api/mcp/auth_callback',
+      ],
+    });
+    expect(() => loadAppConfig({ ...base, GITHUB_CLIENT_ID: 'gh-client' })).toThrow(
+      /missing: PUBLIC_BASE_URL, GITHUB_CLIENT_SECRET, GITHUB_ALLOWED_USER_ID/,
+    );
+  });
+
+  it('accepts a custom redirect URI list', () => {
+    const config = loadAppConfig({
+      ...base,
+      ...github,
+      OAUTH_REDIRECT_URIS: 'https://a.example/cb, https://b.example/cb',
+    });
+    expect(config.auth?.allowedRedirectUris).toEqual([
+      'https://a.example/cb',
+      'https://b.example/cb',
+    ]);
   });
 });
 

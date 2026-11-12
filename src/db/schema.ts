@@ -187,3 +187,36 @@ export const applicationEvents = pgTable(
     check('application_events_payload_type_matches', sql`${t.payload}->>'type' = ${t.type}::text`),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// OAuth (single user; claude.ai registers itself as a client)
+// ---------------------------------------------------------------------------
+
+/** Clients registered via dynamic client registration, stored as the SDK returns them. */
+export const oauthClients = pgTable('oauth_clients', {
+  clientId: text('client_id').primaryKey(),
+  info: jsonb('info').$type<Record<string, unknown>>().notNull(),
+  createdAt: createdAt(),
+});
+
+export const oauthTokenKind = pgEnum('oauth_token_kind', ['access', 'refresh']);
+
+/** Issued tokens. Only a SHA-256 hash is stored, never the token itself. */
+export const oauthTokens = pgTable(
+  'oauth_tokens',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    kind: oauthTokenKind('kind').notNull(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.clientId, { onDelete: 'cascade' }),
+    scopes: text('scopes')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    resource: text('resource'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('oauth_tokens_expires_at_idx').on(t.expiresAt)],
+);
