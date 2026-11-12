@@ -33,6 +33,8 @@ export interface ContactInput {
   name: string;
   email?: string | null | undefined;
   phone?: string | null | undefined;
+  /** ISO date after which the contact is deleted automatically. */
+  deleteAfter?: string | null | undefined;
 }
 
 /**
@@ -61,6 +63,7 @@ export async function resolveContact(
   const details = {
     ...(input.email != null && { email: input.email }),
     ...(input.phone != null && { phone: input.phone }),
+    ...(input.deleteAfter !== undefined && { deleteAfter: input.deleteAfter }),
   };
 
   if (existing) {

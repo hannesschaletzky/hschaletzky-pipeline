@@ -17,6 +17,11 @@ const appSchema = z.object({
   DATABASE_URL: postgresUrl,
   DATABASE_PASSWORD: z.string().min(1).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  /**
+   * Optional: delete contacts automatically once all their applications have been closed for
+   * this many days. Unset: only contacts with an explicit delete_after date are deleted.
+   */
+  CONTACT_RETENTION_DAYS: z.coerce.number().int().positive().optional(),
 
   // OAuth for /mcp. All of the GitHub settings or none (then /mcp is not served).
   PUBLIC_BASE_URL: z.url().optional(),
@@ -60,6 +65,7 @@ export interface AuthConfig {
 export interface AppConfig {
   databaseUrl: string;
   port: number;
+  contactRetentionDays: number | null;
   /** null: OAuth not configured, /mcp is not served. */
   auth: AuthConfig | null;
 }
@@ -145,6 +151,7 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
   return {
     databaseUrl: withPassword(config.DATABASE_URL, config.DATABASE_PASSWORD),
     port: config.PORT,
+    contactRetentionDays: config.CONTACT_RETENTION_DAYS ?? null,
     auth: authConfig(config),
   };
 }

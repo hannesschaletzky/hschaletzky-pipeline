@@ -27,6 +27,7 @@ describe('loadAppConfig', () => {
     expect(config).toEqual({
       databaseUrl: 'postgres://app:secret@localhost:5432/pipeline',
       port: 3000,
+      contactRetentionDays: null,
       auth: null,
     });
   });

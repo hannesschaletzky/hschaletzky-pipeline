@@ -48,7 +48,14 @@ const fieldShape = {
   agency: text.nullish().describe('Agency or portal name; created on first use'),
   agency_project_id: text.nullish().describe("The agency's reference number for the posting"),
   contact: z
-    .object({ name: text, email: z.email().nullish(), phone: text.nullish() })
+    .object({
+      name: text,
+      email: z.email().nullish(),
+      phone: text.nullish(),
+      delete_after: isoDate
+        .nullish()
+        .describe('Delete this contact automatically after this date (data minimisation)'),
+    })
     .nullish()
     .describe('Contact person at the agency'),
   end_client: text.nullish().describe('End client name, if known'),
@@ -77,7 +84,12 @@ function toFields(input: FieldInput): ApplicationFields {
   return {
     agency: input.agency,
     agencyProjectId: input.agency_project_id,
-    contact: input.contact,
+    contact: input.contact && {
+      name: input.contact.name,
+      email: input.contact.email,
+      phone: input.contact.phone,
+      deleteAfter: input.contact.delete_after,
+    },
     endClient: input.end_client,
     endClientHints: input.end_client_hints,
     location: input.location,

@@ -69,8 +69,9 @@ if schema and migrations diverge.
 - Postgres is not exposed publicly. The app connects with a role limited to reading and writing
   data; schema changes run separately with the owner role.
 - Logs contain ids and counts, never names, e-mail addresses or posting texts.
-- Contact details are deleted after a configurable period once applications are closed
-  (`contacts.delete_after`).
+- Contact details are deleted by a daily job: always once their `delete_after` date has passed,
+  and optionally (`CONTACT_RETENTION_DAYS`) once all their applications have been closed for that
+  long. Applications keep their history; it references contacts by id only, never by name.
 - Secret scanning: gitleaks runs as a pre-commit hook and in CI over the full history.
 
 <!-- TODO (milestone 2): authentication, backups -->
