@@ -27,6 +27,7 @@ export const applicationEventType = pgEnum('application_event_type', [
   'status_change',
   'note',
   'contact',
+  'update',
 ]);
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -163,9 +164,12 @@ export const applications = pgTable(
  * (names, e-mails), otherwise it would survive contact deletion.
  */
 export type ApplicationEventPayload =
-  | { type: 'status_change'; from: ApplicationStatus; to: ApplicationStatus }
+  /** `from` is null for the initial status when an application is created. */
+  | { type: 'status_change'; from: ApplicationStatus | null; to: ApplicationStatus }
   | { type: 'note'; text: string }
-  | { type: 'contact'; contactId: number };
+  | { type: 'contact'; contactId: number }
+  /** Names of the changed fields only, never their values. */
+  | { type: 'update'; fields: string[] };
 
 export const applicationEvents = pgTable(
   'application_events',

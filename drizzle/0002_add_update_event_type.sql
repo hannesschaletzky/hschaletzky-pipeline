@@ -1,0 +1,1 @@
+ALTER TYPE "public"."application_event_type" ADD VALUE 'update';
