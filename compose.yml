@@ -1,0 +1,28 @@
+# Local development only. Production runs via hschaletzky-infra, where Postgres has no published port.
+name: hschaletzky-pipeline
+
+services:
+  postgres:
+    # Pinned on purpose; the integration tests read this tag so both always match.
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pipeline
+      POSTGRES_DB: pipeline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    ports:
+      # Bound to localhost only, never to all interfaces.
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      # Postgres 18+ images keep data in a versioned subdirectory below this path.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pipeline -d pipeline']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  postgres_data:
