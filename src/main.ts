@@ -9,7 +9,7 @@ const config = loadAppConfig();
 const database = createDatabase(config.databaseUrl);
 const auth = config.auth ? createMcpAuth({ db: database.db, config: config.auth }) : undefined;
 if (!auth) log.warn('OAuth not configured: /mcp is disabled');
-const app = createApp({ db: database.db, auth });
+const app = createApp({ db: database.db, auth, backupStatusFile: config.backupStatusFile });
 
 const stopRetention = scheduleRetention(database.db, config.contactRetentionDays);
 

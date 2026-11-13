@@ -53,7 +53,8 @@ npm test                 # unit + integration (starts a Postgres container)
 ```
 
 `npm run db:migrate` applies migrations as the owner role and creates or updates the
-least-privilege app role (`pipeline_app`). It is idempotent: after changing `APP_DB_PASSWORD`, just
+least-privilege app role (`pipeline_app`). If `BACKUP_DB_PASSWORD` is set, it also manages a
+read-only role for backups (`pipeline_backup`). It is idempotent: after changing a password, just
 run it again.
 
 After changing `src/db/schema.ts`, run `npm run db:generate` and commit the new migration. CI fails
@@ -73,8 +74,12 @@ if schema and migrations diverge.
   and optionally (`CONTACT_RETENTION_DAYS`) once all their applications have been closed for that
   long. Applications keep their history; it references contacts by id only, never by name.
 - Secret scanning: gitleaks runs as a pre-commit hook and in CI over the full history.
-
-<!-- TODO (milestone 2): authentication, backups -->
+- Authentication: every MCP request needs an OAuth access token. Login goes through GitHub and only
+  one GitHub user id is accepted ([ADR 0003](docs/adr/0003-single-user-oauth-via-github.md)).
+- Backups: a nightly `pg_dump` with the read-only `pipeline_backup` role, encrypted with
+  [age](https://age-encryption.org) to a public key, so the server cannot read its own backups.
+  `/health` reports the age of the last successful backup (`backup.ageHours`) for monitoring.
+  The backup job itself lives in hschaletzky-infra.
 
 ## Deployment
 
@@ -85,10 +90,10 @@ the restricted deploy command on the server. The server setup lives in
 
 One image, two commands:
 
-| Command                       | Credentials   | Purpose                                                               |
-| ----------------------------- | ------------- | --------------------------------------------------------------------- |
-| `node dist/db/migrate.js`     | owner role    | apply migrations, configure the app role — runs first on every deploy |
-| `node dist/main.js` (default) | app role only | serve `/health`, OAuth and `/mcp`                                     |
+| Command                       | Credentials   | Purpose                                                            |
+| ----------------------------- | ------------- | ------------------------------------------------------------------ |
+| `node dist/db/migrate.js`     | owner role    | apply migrations, configure app and backup roles — first on deploy |
+| `node dist/main.js` (default) | app role only | serve `/health`, OAuth and `/mcp`                                  |
 
 Secrets are passed as files (`*_FILE` variables, Docker Compose secrets), never as plain
 environment variables. The container runs as the unprivileged `node` user.

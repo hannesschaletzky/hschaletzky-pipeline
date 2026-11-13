@@ -6,6 +6,7 @@ import { MCP_PATH, type McpAuth } from '../auth/index.js';
 import type { Database } from '../db/client.js';
 import { log } from '../log.js';
 import { mcpMethodNotAllowed, mcpPostHandler } from '../mcp/http.js';
+import { readBackupStatus } from '../services/backup-status.js';
 
 export interface AppOptions {
   db: Database;
@@ -14,19 +15,26 @@ export interface AppOptions {
    * without authentication by accident.
    */
   auth?: McpAuth;
+  /** Status file of the server's backup job; when set, /health reports the backup age. */
+  backupStatusFile?: string | null;
 }
 
-export function createApp({ db, auth }: AppOptions): Express {
+export function createApp({ db, auth, backupStatusFile }: AppOptions): Express {
   const app = express();
   app.disable('x-powered-by');
   // Behind Caddy: use X-Forwarded-For from exactly one proxy hop (rate limiting, logs).
   app.set('trust proxy', 1);
 
-  // Liveness/readiness for Docker and Caddy. Returns no data, so it stays unauthenticated.
+  // Liveness/readiness for Docker and Caddy. Returns no application data, so it stays
+  // unauthenticated. A stale backup does not make the app unhealthy (Docker would restart it
+  // for nothing); monitoring alerts on backup.ageHours instead.
   app.get('/health', async (_req, res) => {
     try {
       await db.execute(sql`select 1`);
-      res.json({ status: 'ok' });
+      res.json({
+        status: 'ok',
+        ...(backupStatusFile && { backup: await readBackupStatus(backupStatusFile) }),
+      });
     } catch {
       log.error('health check failed: database unreachable');
       res.status(503).json({ status: 'unavailable' });

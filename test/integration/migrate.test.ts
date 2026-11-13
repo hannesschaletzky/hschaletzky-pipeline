@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '../../src/db/client.js';
-import { APP_ROLE, runMigrations } from '../../src/db/migrate.js';
+import { APP_ROLE, BACKUP_ROLE, runMigrations } from '../../src/db/migrate.js';
 import { startTestDatabase, type TestDatabase } from './postgres.js';
 
 let testDb: TestDatabase;
@@ -49,5 +49,32 @@ describe('migration step', () => {
     } finally {
       await close();
     }
+  });
+
+  it('creates a read-only backup role that can run pg_dump', async () => {
+    const appPassword = 'rotated-app-password-0123456789';
+    const backupPassword = 'test-backup-password-0123456789';
+    await runMigrations({ ownerUrl: testDb.ownerUrl, appPassword, backupPassword });
+
+    const backupUrl = new URL(testDb.ownerUrl);
+    backupUrl.username = BACKUP_ROLE;
+    backupUrl.password = backupPassword;
+    const { db, close } = createDatabase(backupUrl.toString());
+    try {
+      await expect(db.execute(sql`select count(*) from applications`)).resolves.toBeDefined();
+      await expect(
+        db.execute(sql`insert into organizations (name, normalized_name) values ('x', 'x')`),
+      ).rejects.toThrow();
+    } finally {
+      await close();
+    }
+
+    const dump = await testDb.container.exec(
+      ['pg_dump', '-h', '127.0.0.1', '-U', BACKUP_ROLE, '-d', 'pipeline', '--schema-only'],
+      { env: { PGPASSWORD: backupPassword } },
+    );
+    expect(dump.exitCode).toBe(0);
+    expect(dump.output).toContain('CREATE TABLE public.applications');
+    expect(dump.output).toContain('CREATE TABLE drizzle.__drizzle_migrations');
   });
 });

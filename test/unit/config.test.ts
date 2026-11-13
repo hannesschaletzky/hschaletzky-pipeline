@@ -29,6 +29,7 @@ describe('loadAppConfig', () => {
       port: 3000,
       contactRetentionDays: null,
       auth: null,
+      backupStatusFile: null,
     });
   });
 
@@ -96,6 +97,23 @@ describe('loadMigrationConfig', () => {
         APP_DB_PASSWORD: 'short',
       }),
     ).toThrow(/APP_DB_PASSWORD/);
+  });
+
+  it('manages the backup role only when a backup password is given', () => {
+    const base = {
+      MIGRATION_DATABASE_URL: 'postgres://owner:pw@localhost/pipeline',
+      APP_DB_PASSWORD: 'app-password-0123456789',
+    };
+    expect(loadMigrationConfig(base).backupPassword).toBeNull();
+    expect(
+      loadMigrationConfig({
+        ...base,
+        BACKUP_DB_PASSWORD_FILE: secretFile('backup-password-0123\n'),
+      }).backupPassword,
+    ).toBe('backup-password-0123');
+    expect(() => loadMigrationConfig({ ...base, BACKUP_DB_PASSWORD: 'short' })).toThrow(
+      /BACKUP_DB_PASSWORD/,
+    );
   });
 });
 

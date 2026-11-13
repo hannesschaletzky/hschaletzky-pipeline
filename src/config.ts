@@ -31,6 +31,12 @@ const appSchema = z.object({
   GITHUB_ALLOWED_USER_ID: z.coerce.number().int().positive().optional(),
   /** Comma-separated redirect URIs OAuth clients may register. */
   OAUTH_REDIRECT_URIS: z.string().optional(),
+
+  /**
+   * Optional: file the server's backup job writes the time of its last successful run to
+   * (ISO 8601). /health then reports the backup age, so monitoring can alert on stale backups.
+   */
+  BACKUP_STATUS_FILE: z.string().min(1).optional(),
 });
 
 /** claude.ai's OAuth callback; Anthropic announced it may move to claude.com. */
@@ -45,6 +51,8 @@ const migrationSchema = z.object({
   MIGRATION_DATABASE_PASSWORD: z.string().min(1).optional(),
   /** Password the migration step sets for the least-privilege app role. */
   APP_DB_PASSWORD: z.string().min(16, 'must be at least 16 characters'),
+  /** Optional: password for the read-only role used by backups (pg_dump). */
+  BACKUP_DB_PASSWORD: z.string().min(16, 'must be at least 16 characters').optional(),
 });
 
 /** Values that may be passed as files. The GitHub client id is not secret, but travels with its secret. */
@@ -52,6 +60,7 @@ const SECRET_NAMES = [
   'DATABASE_PASSWORD',
   'MIGRATION_DATABASE_PASSWORD',
   'APP_DB_PASSWORD',
+  'BACKUP_DB_PASSWORD',
   'GITHUB_CLIENT_ID',
   'GITHUB_CLIENT_SECRET',
 ];
@@ -70,11 +79,13 @@ export interface AppConfig {
   contactRetentionDays: number | null;
   /** null: OAuth not configured, /mcp is not served. */
   auth: AuthConfig | null;
+  backupStatusFile: string | null;
 }
 
 export interface MigrationConfig {
   ownerUrl: string;
   appPassword: string;
+  backupPassword: string | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -155,6 +166,7 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
     port: config.PORT,
     contactRetentionDays: config.CONTACT_RETENTION_DAYS ?? null,
     auth: authConfig(config),
+    backupStatusFile: config.BACKUP_STATUS_FILE ?? null,
   };
 }
 
@@ -163,5 +175,6 @@ export function loadMigrationConfig(env: Env = process.env): MigrationConfig {
   return {
     ownerUrl: withPassword(config.MIGRATION_DATABASE_URL, config.MIGRATION_DATABASE_PASSWORD),
     appPassword: config.APP_DB_PASSWORD,
+    backupPassword: config.BACKUP_DB_PASSWORD ?? null,
   };
 }
