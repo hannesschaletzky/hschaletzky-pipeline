@@ -1,5 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import type { Database } from '../db/client.js';
@@ -167,7 +166,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
         'Finds existing applications that may be the same end-client project as a new posting. ' +
         'Pass everything known; each match has a score, a risk (high = end client has already ' +
         'seen the profile) and human-readable reasons.',
-      inputSchema: {
+      inputSchema: z.object({
         posting_text: text.optional(),
         location: text.optional(),
         start_date: isoDate.optional(),
@@ -176,7 +175,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
         agency: text.optional(),
         agency_project_id: text.optional(),
         exclude_id: id.optional().describe('Leave out this application (when re-checking it)'),
-      },
+      }),
       annotations: readOnly,
     },
     tool('check_duplicate', async (args) => {
@@ -201,7 +200,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
       description:
         'Creates an application (default status "interesting"). Returns its id and any ' +
         'possible duplicates found afterwards.',
-      inputSchema: newApplicationShape,
+      inputSchema: z.object(newApplicationShape),
       annotations: writes,
     },
     tool('add_application', async (args) => {
@@ -227,7 +226,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
       description:
         'Changes the status of an application and records it in the history, optionally ' +
         'with a note. Any status may follow any other, including reopening a closed one.',
-      inputSchema: { id, status, note: text.optional() },
+      inputSchema: z.object({ id, status, note: text.optional() }),
       annotations: writes,
     },
     tool('update_status', async (args) => updateStatus(db, args.id, args.status, args.note)),
@@ -240,7 +239,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
       description:
         'Changes fields of an application (not the status — use update_status). Only given ' +
         'fields change; pass null to clear one. Set same_project_as_id to confirm a duplicate.',
-      inputSchema: { id, title: text.optional(), ...fieldShape },
+      inputSchema: z.object({ id, title: text.optional(), ...fieldShape }),
       annotations: { ...writes, idempotentHint: true },
     },
     tool('update_application', async ({ id: appId, title, ...fields }) =>
@@ -253,11 +252,11 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
     {
       title: 'List applications',
       description: 'Overview of applications, most recently updated first.',
-      inputSchema: {
+      inputSchema: z.object({
         status: z.array(status).optional().describe('Only these statuses'),
         agency: text.optional().describe('Only this agency'),
         since: isoDate.optional().describe('Only applications created on or after this date'),
-      },
+      }),
       annotations: readOnly,
     },
     tool('list_applications', async (args) => ({
@@ -272,7 +271,7 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
       description:
         'All details of one application, including contact, history and applications ' +
         'confirmed as the same project.',
-      inputSchema: { id },
+      inputSchema: z.object({ id }),
       annotations: readOnly,
     },
     tool('get_application', async (args) => getApplication(db, args.id)),
@@ -285,10 +284,10 @@ export function createMcpServer({ db }: { db: Database }): McpServer {
       description:
         'One-off import of existing applications, all or nothing. Refuses to run if ' +
         'applications already exist unless allow_existing is true.',
-      inputSchema: {
+      inputSchema: z.object({
         entries: z.array(z.object(newApplicationShape)).min(1),
         allow_existing: z.boolean().optional(),
-      },
+      }),
       annotations: writes,
     },
     tool('import_seed', async (args) =>

@@ -1,6 +1,6 @@
 # ADR 0003: Single-user OAuth with GitHub as login
 
-- Status: accepted
+- Status: superseded by [ADR 0005](0005-external-authorization-server.md)
 - Date: 2026-11-12
 
 ## Context

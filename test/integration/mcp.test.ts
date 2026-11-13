@@ -1,8 +1,7 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import type { RequestHandler } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -29,14 +28,21 @@ const passThrough: RequestHandler = (_req, _res, next) => {
 const allowAll = passThrough;
 
 let client: Client;
+let baseUrl: string;
 
 beforeAll(async () => {
   testDb = await startTestDatabase();
   database = createDatabase(testDb.appUrl);
-  const baseUrl = await listen(allowAll);
-  client = new Client({ name: 'test-client', version: '1.0.0' });
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`)));
+  baseUrl = await listen(allowAll);
+  client = await connect('auto');
 });
+
+/** 'auto' negotiates the current protocol (2026-07-28), 'legacy' uses the 2025 initialize handshake. */
+async function connect(mode: 'auto' | 'legacy'): Promise<Client> {
+  const c = new Client({ name: 'test-client', version: '1.0.0' }, { versionNegotiation: { mode } });
+  await c.connect(new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`)));
+  return c;
+}
 
 afterAll(async () => {
   await client.close();
@@ -69,6 +75,45 @@ describe('MCP endpoint', () => {
     });
     const res = await fetch(`${baseUrl}/mcp`, { method: 'POST' });
     expect(res.status).toBe(401);
+  });
+
+  it('speaks the current protocol and still serves 2025-era clients', async () => {
+    expect(client.getNegotiatedProtocolVersion()).toBe('2026-07-28');
+
+    const legacy = await connect('legacy');
+    try {
+      expect(legacy.getNegotiatedProtocolVersion()).toBe('2025-11-25');
+      expect((await legacy.listTools()).tools).toHaveLength(7);
+    } finally {
+      await legacy.close();
+    }
+  });
+
+  it('answers server/discover from 2026-07-28 clients', async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': '2026-07-28',
+        'Mcp-Method': 'server/discover',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'server/discover',
+        params: {
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+            'io.modelcontextprotocol/clientInfo': { name: 'probe', version: '1.0.0' },
+            'io.modelcontextprotocol/clientCapabilities': {},
+          },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { result?: { supportedVersions?: string[] } };
+    expect(JSON.stringify(body.result)).toContain('2026-07-28');
   });
 
   it('offers the seven tools and usage instructions', async () => {

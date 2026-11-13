@@ -5,7 +5,7 @@ import { MCP_PATH, type McpAuth } from '../auth/index.js';
 
 import type { Database } from '../db/client.js';
 import { log } from '../log.js';
-import { mcpMethodNotAllowed, mcpPostHandler } from '../mcp/http.js';
+import { MAX_MCP_BODY_BYTES, mcpHandler } from '../mcp/http.js';
 import { readBackupStatus } from '../services/backup-status.js';
 
 export interface AppOptions {
@@ -43,10 +43,7 @@ export function createApp({ db, auth, backupStatusFile }: AppOptions): Express {
 
   if (auth) {
     app.use(auth.routes);
-    // Seed imports can carry many posting texts at once.
-    app.post(MCP_PATH, auth.bearer, express.json({ limit: '5mb' }), mcpPostHandler(db));
-    app.get(MCP_PATH, auth.bearer, mcpMethodNotAllowed);
-    app.delete(MCP_PATH, auth.bearer, mcpMethodNotAllowed);
+    app.all(MCP_PATH, auth.bearer, express.json({ limit: MAX_MCP_BODY_BYTES }), mcpHandler(db));
   }
 
   const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {

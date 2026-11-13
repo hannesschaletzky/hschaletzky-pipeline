@@ -1,7 +1,7 @@
 import { and, isNotNull, lt, lte, or, sql } from 'drizzle-orm';
 
 import type { DbOrTx } from '../db/client.js';
-import { applications, contacts, oauthTokens } from '../db/schema.js';
+import { applications, contacts } from '../db/schema.js';
 import { CLOSED_STATUSES } from '../domain/status.js';
 import { log } from '../log.js';
 
@@ -53,14 +53,6 @@ export async function deleteExpiredContacts(
   return deleted.length;
 }
 
-export async function deleteExpiredTokens(db: DbOrTx, now = new Date()): Promise<number> {
-  const deleted = await db
-    .delete(oauthTokens)
-    .where(lt(oauthTokens.expiresAt, now))
-    .returning({ hash: oauthTokens.tokenHash });
-  return deleted.length;
-}
-
 /** Runs the cleanup now and then daily. Logs counts only. */
 export function scheduleRetention(
   db: DbOrTx,
@@ -70,8 +62,7 @@ export function scheduleRetention(
   const run = async () => {
     try {
       const contactsDeleted = await deleteExpiredContacts(db, { retentionDays });
-      const tokensDeleted = await deleteExpiredTokens(db);
-      log.info('retention run', { contactsDeleted, tokensDeleted });
+      log.info('retention run', { contactsDeleted });
     } catch (error) {
       log.error('retention run failed', {
         error: error instanceof Error ? error.name : 'unknown',

@@ -23,7 +23,9 @@ Claude connects through an MCP server, so checks and updates happen directly in 
 src/
   domain/   pure business logic (status transitions, duplicate scoring) — no I/O
   db/       Drizzle schema, client, migrations runner
-  http/     Express app (health; OAuth and /mcp in milestone 2)
+  auth/     token verification and protected resource metadata (resource server only)
+  mcp/      MCP server: tools and the Streamable HTTP handler (SDK v2)
+  http/     Express app: /health, /mcp
   config.ts environment validation
 drizzle/    versioned SQL migrations (generated, committed)
 docs/adr/   architecture decision records
@@ -74,8 +76,10 @@ if schema and migrations diverge.
   and optionally (`CONTACT_RETENTION_DAYS`) once all their applications have been closed for that
   long. Applications keep their history; it references contacts by id only, never by name.
 - Secret scanning: gitleaks runs as a pre-commit hook and in CI over the full history.
-- Authentication: every MCP request needs an OAuth access token. Login goes through GitHub and only
-  one GitHub user id is accepted ([ADR 0003](docs/adr/0003-single-user-oauth-via-github.md)).
+- Authentication: every MCP request needs a JWT access token from
+  [hschaletzky-auth](https://github.com/hannesschaletzky/hschaletzky-auth) (GitHub login, one
+  allowed user), verified locally against its published keys
+  ([ADR 0005](docs/adr/0005-external-authorization-server.md)).
 - Backups: a nightly `pg_dump` with the read-only `pipeline_backup` role, encrypted with
   [age](https://age-encryption.org) to a public key, so the server cannot read its own backups.
   `/health` reports the age of the last successful backup (`backup.ageHours`) for monitoring.
@@ -93,7 +97,7 @@ One image, two commands:
 | Command                       | Credentials   | Purpose                                                            |
 | ----------------------------- | ------------- | ------------------------------------------------------------------ |
 | `node dist/db/migrate.js`     | owner role    | apply migrations, configure app and backup roles — first on deploy |
-| `node dist/main.js` (default) | app role only | serve `/health`, OAuth and `/mcp`                                  |
+| `node dist/main.js` (default) | app role only | serve `/health`, resource metadata and `/mcp`                      |
 
 Secrets are passed as files (`*_FILE` variables, Docker Compose secrets), never as plain
 environment variables. The container runs as the unprivileged `node` user.

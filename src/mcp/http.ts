@@ -1,33 +1,36 @@
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { createMcpHandler } from '@modelcontextprotocol/server';
 import type { RequestHandler } from 'express';
 
 import type { Database } from '../db/client.js';
+import { log } from '../log.js';
 import { createMcpServer } from './server.js';
 
+/** Seed imports can carry many posting texts at once. */
+export const MAX_MCP_BODY_BYTES = 5 * 1024 * 1024;
+
 /**
- * Stateless Streamable HTTP: a fresh server and transport per request, no session state.
- * Enough for tool calls, and nothing to clean up or share between instances.
+ * Serves MCP over Streamable HTTP for both protocol eras from one endpoint:
+ * 2026-07-28 clients (per-request metadata, `server/discover`) and 2025-era clients
+ * (`initialize` handshake, served statelessly). Every request gets a fresh server instance,
+ * so there is no session state to keep, clean up or share between instances.
+ * GET and DELETE (2025 session operations) are answered with 405 by the SDK.
  */
-export function mcpPostHandler(db: Database): RequestHandler {
-  return async (req, res) => {
-    const server = createMcpServer({ db });
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    });
-    res.on('close', () => {
-      void transport.close();
-      void server.close();
-    });
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+export function mcpHandler(db: Database): RequestHandler {
+  const handler = createMcpHandler(() => createMcpServer({ db }), {
+    maxRequestBodySize: MAX_MCP_BODY_BYTES,
+    // Reporting only; never log the error message, it may echo request content.
+    onerror: (error) => {
+      log.warn('mcp request rejected', { error: error.name });
+    },
+  });
+  const node = toNodeHandler(handler, {
+    maxRequestBodySize: MAX_MCP_BODY_BYTES,
+    onerror: (error) => {
+      log.error('mcp handler failed', { error: error.name });
+    },
+  });
+  return (req, res, next) => {
+    node(req, res, req.body).catch(next);
   };
 }
-
-/** GET (server-initiated stream) and DELETE (end session) are not supported without sessions. */
-export const mcpMethodNotAllowed: RequestHandler = (_req, res) => {
-  res
-    .status(405)
-    .set('Allow', 'POST')
-    .json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
-};

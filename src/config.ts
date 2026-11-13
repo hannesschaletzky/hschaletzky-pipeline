@@ -23,14 +23,14 @@ const appSchema = z.object({
    */
   CONTACT_RETENTION_DAYS: z.coerce.number().int().positive().optional(),
 
-  // OAuth for /mcp. All of the GitHub settings or none (then /mcp is not served).
+  // Access to /mcp: tokens from an external authorization server (hschaletzky-auth).
+  // Both or neither; without them /mcp is not served.
+  /** Public origin of this service; the MCP resource is <PUBLIC_BASE_URL>/mcp. */
   PUBLIC_BASE_URL: z.url().optional(),
-  GITHUB_CLIENT_ID: z.string().min(1).optional(),
-  GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
-  /** Numeric GitHub user id (stable, unlike the login name): https://api.github.com/users/<login> */
-  GITHUB_ALLOWED_USER_ID: z.coerce.number().int().positive().optional(),
-  /** Comma-separated redirect URIs OAuth clients may register. */
-  OAUTH_REDIRECT_URIS: z.string().optional(),
+  /** Issuer of the access tokens, e.g. https://auth.example.com */
+  AUTH_ISSUER: z.url().optional(),
+  /** JWKS of the issuer. Default: <AUTH_ISSUER>/api/auth/jwks (Better Auth). */
+  AUTH_JWKS_URL: z.url().optional(),
 
   /**
    * Optional: file the server's backup job writes the time of its last successful run to
@@ -38,12 +38,6 @@ const appSchema = z.object({
    */
   BACKUP_STATUS_FILE: z.string().min(1).optional(),
 });
-
-/** claude.ai's OAuth callback; Anthropic announced it may move to claude.com. */
-export const DEFAULT_REDIRECT_URIS = [
-  'https://claude.ai/api/mcp/auth_callback',
-  'https://claude.com/api/mcp/auth_callback',
-];
 
 const migrationSchema = z.object({
   /** Owner role: applies migrations and manages the app role. */
@@ -55,22 +49,19 @@ const migrationSchema = z.object({
   BACKUP_DB_PASSWORD: z.string().min(16, 'must be at least 16 characters').optional(),
 });
 
-/** Values that may be passed as files. The GitHub client id is not secret, but travels with its secret. */
+/** Values that may be passed as files. */
 const SECRET_NAMES = [
   'DATABASE_PASSWORD',
   'MIGRATION_DATABASE_PASSWORD',
   'APP_DB_PASSWORD',
   'BACKUP_DB_PASSWORD',
-  'GITHUB_CLIENT_ID',
-  'GITHUB_CLIENT_SECRET',
 ];
 
 export interface AuthConfig {
   publicBaseUrl: URL;
-  githubClientId: string;
-  githubClientSecret: string;
-  allowedGithubUserId: number;
-  allowedRedirectUris: string[];
+  /** Expected `iss` of access tokens (the authorization server). */
+  issuer: string;
+  jwksUrl: URL;
 }
 
 export interface AppConfig {
@@ -127,35 +118,19 @@ function withPassword(url: string, password: string | undefined): string {
 }
 
 function authConfig(config: z.infer<typeof appSchema>): AuthConfig | null {
-  const required = {
-    PUBLIC_BASE_URL: config.PUBLIC_BASE_URL,
-    GITHUB_CLIENT_ID: config.GITHUB_CLIENT_ID,
-    GITHUB_CLIENT_SECRET: config.GITHUB_CLIENT_SECRET,
-    GITHUB_ALLOWED_USER_ID: config.GITHUB_ALLOWED_USER_ID,
-  };
-  const missing = Object.entries(required)
-    .filter(([, value]) => value === undefined)
-    .map(([name]) => name);
-  if (missing.length === Object.keys(required).length) return null;
-  if (
-    missing.length > 0 ||
-    !config.PUBLIC_BASE_URL ||
-    !config.GITHUB_CLIENT_ID ||
-    !config.GITHUB_CLIENT_SECRET ||
-    !config.GITHUB_ALLOWED_USER_ID
-  ) {
-    throw new Error(`Incomplete OAuth configuration, missing: ${missing.join(', ')}`);
+  const { PUBLIC_BASE_URL: publicBaseUrl, AUTH_ISSUER: issuer } = config;
+  if (!publicBaseUrl && !issuer) return null;
+  if (!publicBaseUrl || !issuer) {
+    const missing = !publicBaseUrl ? 'PUBLIC_BASE_URL' : 'AUTH_ISSUER';
+    throw new Error(`Incomplete auth configuration, missing: ${missing}`);
   }
+  // The issuer is compared with the token's `iss` exactly, so normalise it to the bare origin
+  // form Better Auth uses (no trailing slash).
+  const normalisedIssuer = issuer.replace(/\/+$/, '');
   return {
-    publicBaseUrl: new URL(config.PUBLIC_BASE_URL),
-    githubClientId: config.GITHUB_CLIENT_ID,
-    githubClientSecret: config.GITHUB_CLIENT_SECRET,
-    allowedGithubUserId: config.GITHUB_ALLOWED_USER_ID,
-    allowedRedirectUris: config.OAUTH_REDIRECT_URIS
-      ? config.OAUTH_REDIRECT_URIS.split(',')
-          .map((uri) => uri.trim())
-          .filter(Boolean)
-      : DEFAULT_REDIRECT_URIS,
+    publicBaseUrl: new URL(publicBaseUrl),
+    issuer: normalisedIssuer,
+    jwksUrl: new URL(config.AUTH_JWKS_URL ?? `${normalisedIssuer}/api/auth/jwks`),
   };
 }
 
